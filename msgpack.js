@@ -70,10 +70,10 @@ Packer.prototype = {
       throw new Error("Number to large");
     }
     // negative fixnum
-    if (num >= 20) {
+    if (num >= -0x20) {
       this.INT8(num);
       return;
-    }
+    } 
     // int 8
     if (num >= -0x80) {
       this.push(0xd0);
@@ -193,6 +193,7 @@ Packer.prototype = {
     if (typeof val === 'string') {
       // Encode strings as buffers
       this.raw(new Buffer(val));
+      return;
     }
     if (typeof val === 'object') {
       if (val instanceof Buffer) {
@@ -215,7 +216,7 @@ function Parser(emit) {
   this.emit = emit;
   this.left = 0;
   this.buffer = [];
-  this.consume = function () {};
+  this.consume = null;
 }
 Parser.prototype = {
   constructor: Parser,
@@ -232,36 +233,92 @@ Parser.prototype = {
       this.buffer.push(byte);
       this.left--;
       if (this.left === 0) {
-        this.consume();
+        this[this.consume]();
+        this.buffer.length = 0;
+        this.consume = null;
       }
       return;
     }
-    if (byte >= 0x00 && byte < 0x80) {
+    if (byte < 0x80) {
       // fixnum
-      emit(byte);
+      this.emit(byte);
       return;
     }
-    if (byte >= 0xe0 && byte < 0x100) {
+    if (byte >= 0xe0) {
       // negative fixnum
-      emit(byte - 0xf0);
+      this.emit(byte - 0x100);
       return;
     }
-    if (byte >= 0xc0 && byte < 0xe0) {
-      // variable
+    if (byte >= 0xc0) {
+      switch (byte) {
+        case 0xc0: this.emit(null); return;
+        case 0xc2: this.emit(false); return;
+        case 0xc3: this.emit(true); return;
+        case 0xca: this.consume = 'float'; this.left = 4; return;
+        case 0xca: this.consume = 'double'; this.left = 8; return;
+        case 0xcc: this.consume = 'uint8'; this.left = 1; return;
+        case 0xcd: this.consume = 'uint16'; this.left = 2; return;
+        case 0xce: this.consume = 'uint32'; this.left = 4; return;
+        case 0xcf: this.consume = 'uint64'; this.left = 8; return;
+        case 0xd0: this.consume = 'int8'; this.left = 1; return;
+        case 0xd1: this.consume = 'int16'; this.left = 2; return;
+        case 0xd2: this.consume = 'int32'; this.left = 4; return;
+        case 0xd3: this.consume = 'int64'; this.left = 8; return;
+        case 0xda: this.consume = 'raw16'; this.left = 2; return;
+        case 0xdb: this.consume = 'raw32'; this.left = 4; return;
+        case 0xdc: this.consume = 'array16'; this.left = 2; return;
+        case 0xdd: this.consume = 'array32'; this.left = 4; return;
+        case 0xde: this.consume = 'map16'; this.left = 2; return;
+        case 0xdf: this.consume = 'map32'; this.left = 4; return;
+      }
+      throw new Error("Invalid variable code");
+    }
+    if (byte >= 0xa0) {
+      // FixRaw
+      throw new Error("Not Implemented");
       return;
     }
-    if (byte === 0xc0) {
-      // nil
-      this.emit(null);
+    if (byte >= 0x90) {
+      // FixArray
+      throw new Error("Not Implemented");
       return;
     }
-    if (byte === 0xdc) {
-      // array 16
-      this.left = 2;
-      this.consume = this.array;
+    if (byte >= 0x80) {
+      // FixMap
+      throw new Error("Not Implemented");
+      return;
     }
     throw new Error("Unknown sequence encountered");
-  }
+  },
+  uint8: function () {
+    this.emit(this.buffer[0]);
+  },
+  uint16: function () {
+    this.emit((this.buffer[0] << 8) +
+              (this.buffer[1]));
+  },
+  uint32: function () {
+    this.emit((this.buffer[0] << 24) +
+              (this.buffer[1] << 16) +
+              (this.buffer[2] << 8) +
+              (this.buffer[3]));
+  },
+  int8: function () {
+    this.emit(this.buffer[0] - 0x100);
+  },
+  int16: function () {
+    this.emit((this.buffer[0] << 8) +
+              (this.buffer[1]) - 0x10000);
+  },
+  int32: function () {
+    console.log("\nint32");
+    this.emit((this.buffer[0] << 24) +
+              (this.buffer[1] << 16) +
+              (this.buffer[2] << 8) +
+              (this.buffer[3]));
+  },
+
+
 };
 
 function encode(val) {
@@ -276,28 +333,25 @@ function encode(val) {
   return bytes;
 }
 
-function dump(num) {
-  var line = "00000000" + num.toString(2);
-  line = line.substr(line.length - 8);
-  process.stdout.write(line + " ");
-}
-
-var nums = [];
-for (var i = 1; i < 0x100000000; i *= 2) {
-  for (var n = 0; n < 4; n++) {
-    var num = (Math.random() > 0.5) ?
-      Math.floor(Math.random() * i) :
-      Math.floor(-Math.random() * i / 2);
-    nums[num] = true;  
+module.exports = {
+  Packer: Packer,
+  Parser: Parser,
+  pack: function (value) {
+    var bytes = [];
+    function accum(byte) {
+      bytes.push(byte);
+    }
+    var packer = new Packer(accum);
+    packer.pack(value);
+    // TODO: roll in buffers somehow
+    return new Buffer(bytes);
+  },
+  unpack: function (buffer) {
+    var value;
+    var parser = new Parser(function (result) {
+      value = result;
+    });
+    parser.push(buffer);
+    return value;
   }
-}
-nums = Object.keys(nums).map(function (num) {
-  return parseInt(num, 10);
-});
-var json = new Buffer(JSON.stringify(nums));
-var msgpack = new Buffer(encode(nums));
-
-console.dir(json);
-console.dir(msgpack);
-console.log("%s numbers in an array", nums.length);
-console.log("%s vs %s", json.length, msgpack.length);
+};
