@@ -108,7 +108,7 @@ Packer.prototype = {
   raw: function (buffer) {
     // fix raw
     if (buffer.length < 0x20) {
-      this.push(0xa0 || buffer.length);
+      this.push(0xa0 | buffer.length);
       this.push(buffer);
       return;
     }
@@ -229,9 +229,11 @@ Parser.prototype = {
       return;
     }
     // Hook to consume message bodies
-    if (this.left > 0) {
-      this.buffer.push(byte);
-      this.left--;
+    if (this.consume) {
+      if (this.left > 0) {
+        this.buffer.push(byte);
+        this.left--;
+      }
       if (this.left === 0) {
         this[this.consume]();
         this.buffer.length = 0;
@@ -275,17 +277,18 @@ Parser.prototype = {
     }
     if (byte >= 0xa0) {
       // FixRaw
-      throw new Error("Not Implemented");
+      this.consume = 'raw';
+      this.left = byte & 0x1f;
       return;
     }
     if (byte >= 0x90) {
       // FixArray
-      throw new Error("Not Implemented");
+      this.array(byte & 0xf);
       return;
     }
     if (byte >= 0x80) {
       // FixMap
-      throw new Error("Not Implemented");
+      this.map(byte & 0xf);
       return;
     }
     throw new Error("Unknown sequence encountered");
@@ -294,44 +297,96 @@ Parser.prototype = {
     this.emit(this.buffer[0]);
   },
   uint16: function () {
-    this.emit((this.buffer[0] << 8) +
+    this.emit((this.buffer[0] << 8) |
               (this.buffer[1]));
   },
   uint32: function () {
-    this.emit((this.buffer[0] << 24) +
-              (this.buffer[1] << 16) +
-              (this.buffer[2] << 8) +
+    this.emit((this.buffer[0] << 24) |
+              (this.buffer[1] << 16) |
+              (this.buffer[2] << 8) |
               (this.buffer[3]));
   },
   int8: function () {
     this.emit(this.buffer[0] - 0x100);
   },
   int16: function () {
-    this.emit((this.buffer[0] << 8) +
+    this.emit((this.buffer[0] << 8) |
               (this.buffer[1]) - 0x10000);
   },
   int32: function () {
-    console.log("\nint32");
-    this.emit((this.buffer[0] << 24) +
-              (this.buffer[1] << 16) +
-              (this.buffer[2] << 8) +
+    // TODO: Find out if this overflow trick always works.
+    this.emit((this.buffer[0] << 24) |
+              (this.buffer[1] << 16) |
+              (this.buffer[2] << 8) |
               (this.buffer[3]));
   },
-
-
-};
-
-function encode(val) {
-  var bytes = [];
-  function accum(byte) {
-    bytes.push(byte);
+  array16: function () {
+    this.array((this.buffer[0] << 8) |
+               (this.buffer[1]));
+  },
+  array32: function () {
+    this.array((this.buffer[0] << 24) |
+               (this.buffer[1] << 16) |
+               (this.buffer[2] << 8) |
+               (this.buffer[3]));
+  },
+  map16: function () {
+    this.map((this.buffer[0] << 8) |
+             (this.buffer[1]));
+  },
+  map32: function () {
+    this.map((this.buffer[0] << 24) |
+             (this.buffer[1] << 16) |
+             (this.buffer[2] << 8) |
+             (this.buffer[3]));
+  },
+  raw: function () {
+    var data = new Buffer(this.buffer);
+    if (this.encoding) {
+      this.emit(data.toString(this.encoding));
+    } else {
+      this.emit(data);
+    }
+  },
+  array: function (items) {
+    var results = [];
+    if (items === 0) {
+      this.emit(results);
+      return;
+    }
+    var oldEmit = this.emit;
+    this.emit = function (result) {
+      results.push(result);
+      items--;
+      if (items === 0) {
+        this.emit = oldEmit;
+        this.emit(results);
+      }
+    };
+  },
+  map: function (items) {
+    var results = {};
+    if (items === 0) {
+      this.emit(results);
+      return;
+    }
+    var oldEmit = this.emit;
+    var key;
+    this.emit = function (result) {
+      if (key === undefined) {
+        key = result.toString();
+        return;
+      }
+      results[key] = result;
+      key = undefined;
+      items--;
+      if (items === 0) {
+        this.emit = oldEmit;
+        this.emit(results);
+      }
+    };
   }
-  var packer = new Packer(accum);
-  console.dir(packer);
-  console.dir(packer.__proto__);
-  packer.pack(val);
-  return bytes;
-}
+};
 
 module.exports = {
   Packer: Packer,
@@ -343,14 +398,36 @@ module.exports = {
     }
     var packer = new Packer(accum);
     packer.pack(value);
-    // TODO: roll in buffers somehow
-    return new Buffer(bytes);
+    var length = 0;
+    bytes.forEach(function (byte) {
+      if (typeof byte === 'number') {
+        length++;
+      } else {  
+        length += byte.length;
+      }
+    });
+    var buffer = new Buffer(length);
+    for(var i = 0; i < length; i++) {
+      buffer[i] = 0;
+    }
+    var offset = 0;
+    bytes.forEach(function (byte) {
+      if (typeof byte === 'number') {
+        buffer[offset] = byte;
+        offset++;
+      } else {
+        byte.copy(buffer, offset);
+        offset += byte.length;
+      }
+    });
+    return buffer;
   },
-  unpack: function (buffer) {
+  unpack: function (buffer, encoding) {
     var value;
     var parser = new Parser(function (result) {
       value = result;
     });
+    parser.encoding = encoding;
     parser.push(buffer);
     return value;
   }
