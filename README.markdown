@@ -2,4 +2,6 @@
 
 This is my own experiment with a hand written encoder and parser for msgpack for node.
 
-This is incomplete at the moment.  The encoder is mostly there, but the decoder is barely started.
+The initial implementation is mostly done, missing is 64bit numbers and float/double numbers.
+
+Next is heavy testing and performance tuning...
