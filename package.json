@@ -1,0 +1,17 @@
+{
+  "author": "Tim Caswell <tim@creationix.com>",
+  "name": "msgpack-js",
+  "description": "msgpack encoder and decoder in pure node js",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/creationix/msgpack.git"
+  },
+  "main": "msgpack.js",
+  "engines": {
+    "node": "~0.6.0"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "optionalDependencies": {}
+}
