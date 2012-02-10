@@ -1,10 +1,9 @@
-/*global Buffer*/
-
-var assert = require('assert'),
-    msgpack = require('./msgpack');
+var msgpack = require('./msgpack');
+var util = require('util');
+var assert = require('assert');
 
 var tests = [
-  true, false, null,
+  true, false, null, undefined,
   0, 1, -1, 2, -2, 4, -4, 6, -6,
   0x10, -0x10, 0x20, -0x20, 0x40, -0x40,
   0x80, -0x80, 0x100, -0x100, 0x200, -0x100,
@@ -12,9 +11,9 @@ var tests = [
   0x20000, -0x20000, 0x40000,-0x40000,
   10, 100, 1000, 10000, 100000, 1000000,
   -10, -100, -1000, -10000, -100000, -1000000,
-  'hello', 'world',
-  [1,2,3], [], {name: "Tim", age: 28}, {},
-  // {"a" : 1, "b" : 2, "c" : [1, 2, 3]},
+  'hello', 'world', Buffer("Hello"), Buffer("World"),
+  [1,2,3], [], {name: "Tim", age: 29}, {},
+  {a: 1, b: 2, c: [1, 2, 3]},
 ];
 [0x100, 0x1000, 0x10000, 0x100000].forEach(function (length) {
   var list = new Array(length), obj = {};
@@ -26,17 +25,23 @@ var tests = [
   tests.push(obj);
 });
 
-tests.forEach(function (o) {
-  process.stdout.write("Testing " + JSON.stringify(o).substr(0, 10));
-  var b = msgpack.pack(o);
-  process.stdout.write(' \t.');
-  var oo = msgpack.unpack(b, 'utf8');
-  process.stdout.write('o');
+var width = process.stdout.getWindowSize()[0];
+var mistakes = 0;
+tests.forEach(function (test) {
+  var encoded = msgpack.encode(test);
+  console.log(encoded.inspect().substr(0, width));
+  var decoded = msgpack.decode(encoded);
   try {
-    assert.deepEqual(oo, o);
-    process.stdout.write('O\n');
+    assert.deepEqual(test, decoded);
+    if (typeof test === "object" && test !== null) {
+      assert.equal(test.constructor, decoded.constructor);
+    }
   } catch (err) {
-    process.stdout.write('X\n');
-    console.dir([o, b, oo]);
+    console.log();
+    console.log(util.inspect(test).replace(/\n */g, '').substr(0, width));
+    console.log(util.inspect(decoded).replace(/\n */g, '').substr(0, width));
+    console.log(err.stack);
+    mistakes++;
   }
 });
+process.exit(mistakes);

@@ -1,7 +1,17 @@
 # msgpack for node
 
-This is my own experiment with a hand written encoder and parser for msgpack for node.
+A handwritten msgpack encoder and decoder for Node.JS.
 
-The initial implementation is mostly done, missing is 64bit numbers and float/double numbers.
+I've extended the format a little to allow for encoding and decoding of `undefined` and `Buffer` instances.
 
-Next is heavy testing and performance tuning...
+## Usage
+
+    var msgpack = require('msgpack');
+    var assert = require('assert');
+
+    var initial = {Hello: "World"};
+    var encoded = msgpack.encode(initial);
+    var decoded = msgpack.decode(encoded);
+
+    assert.deepEqual(initial, decoded);
+

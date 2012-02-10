@@ -1,434 +1,469 @@
-/*global Buffer*/
-
-function Packer(push) {
-  this.push = push;
+exports.encode = function (value) {
+  var buffer = new Buffer(sizeof(value));
+  encode(value, buffer, 0);
+  return buffer;
 }
-Packer.prototype = {
-  constructor: Packer,
-  INT8: function (num) {
-    this.push((num >>> 0) & 0xff);
-  },
-  INT16: function (num) {
-    this.push((num >>> 8) & 0xff);
-    this.push((num >>> 0) & 0xff);
-  },
-  INT32: function (num) {
-    this.push((num >>> 24) & 0xff);
-    this.push((num >>> 16) & 0xff);
-    this.push((num >>> 8) & 0xff);
-    this.push((num >>> 0) & 0xff);
-  },
-  INT64: function (num) {
-    // TODO: Implement this, it's tricky
-    // Needs to accept unsigned up to 64 bits
-    // and signed up to 63 bits + sign bit
-    throw new Error("INT64 not implemented!");
-  },
-  SINGLE: function (num) {
-    // TODO: Implement
-    // big-endian IEEE 754 single precision floating point number 
-    // XXXXXXXX_XXXXXXXX_XXXXXXXX_XXXXXXXX
-    throw new Error("SINGLE not implemented!");
-  },
-  DOUBLE: function (num) {
-    // TODO: Implement
-    // big-endian IEEE 754 double precision floating point number
-    // XXXXXXXX_XXXXXXXX_XXXXXXXX_XXXXXXXX_XXXXXXXX_XXXXXXXX_XXXXXXXX_XXXXXXXX
-    throw new Error("DOUBLE not implemented!");
-  },
-  integer: function (num) {
-    if (num >= 0) {
-      // positive fixnum
-      if (num < 0x80) {
-        this.INT8(num);
-        return;
-      }
-      // uint 8
-      if (num < 0x100) {
-        this.push(0xcc);
-        this.INT8(num);
-        return;
-      }
-      // uint 16
-      if (num < 0x10000) {
-        this.push(0xcd);
-        this.INT16(num);
-        return;
-      }
-      // uint 32
-      if (num < 0x100000000) {
-        this.push(0xce);
-        this.INT32(num);
-        return;
-      }
-      // uint 64
-      if (num < 0x10000000000000000) {
-        this.push(0xcf);
-        this.INT64(num);
-        return;
-      }
-      throw new Error("Number to large");
-    }
-    // negative fixnum
-    if (num >= -0x20) {
-      this.INT8(num);
-      return;
-    } 
-    // int 8
-    if (num >= -0x80) {
-      this.push(0xd0);
-      this.INT8(num);
-      return;
-    }
-    // int 16
-    if (num >= -0x8000) {
-      this.push(0xd1);
-      this.INT16(num);
-      return;
-    }
-    // int 32
-    if (num >= -0x80000000) {
-      this.push(0xd2);
-      this.INT32(num);
-      return;
-    }
-    // int 64
-    if (num >= -0x8000000000000000) {
-      this.push(0xd3);
-      this.INT64(num);
-      return;
-    }
-    throw new Error("Number to small");
-  },
-  float: function (num) {
-    // TODO: Detect when SINGLE is enough precision somehow
-    this.push(0xcb);
-    this.DOUBLE(num);
-  },
-  raw: function (buffer) {
-    // fix raw
-    if (buffer.length < 0x20) {
-      this.push(0xa0 | buffer.length);
-      this.push(buffer);
-      return;
-    }
-    // raw 16
-    if (buffer.length < 0x10000) {
-      this.push(0xda);
-      this.push(buffer);
-      return;
-    }
-    // raw 32
-    if (buffer.length < 0x100000000) {
-      this.push(0xdb);
-      this.push(buffer);
-      return;
-    }
-    throw new Error("Raw buffer too long");
-  },
-  array: function (val) {
-    if (val.length < 0x10) {
-      // fix array
-      this.push(0x90 | val.length);
-    } else if (val.length < 0x10000) {
-      // array 16
-      this.push(0xdc);
-      this.INT16(val.length);
-    } else if (val.length < 0x100000000) {
-      // array 32
-      this.push(0xdd);
-      this.INT32(val.length);
-    } else {
-      throw new Error("Array too long");
-    }
-    val.forEach(function (item) {
-      this.pack(item);
-    }, this);
-  },
-  map: function (val) {
-    var keys = Object.keys(val);
-    if (keys.length < 0x10) {
-      // fix map
-      this.push(0x80 | keys.length);
-    } else if (keys.length < 0x10000) {
-      // map 16
-      this.push(0xde);
-      this.INT16(keys.length);
-    } else if (keys.length < 0x100000000) {
-      // map 32
-      this.push(0xdf);
-      this.INT32(keys.length);
-    } else {
-      throw new Error("Map too long");
-    }
-    keys.forEach(function (key) {
-      this.pack(key);
-      this.pack(val[key]);
-    }, this);
-  },
-  pack: function (val) {
-    // nil
-    if (val === null || val === undefined) {
-      this.push(0xc0);
-      return;
-    }
-    // true
-    if (val === true) {
-      this.push(0xc3);
-      return;
-    }
-    // false
-    if (val === false) {
-      this.push(0xc2);
-      return;
-    }
-    if (typeof val === 'number') {
-      if (Math.floor(val) === val) {
-        this.integer(val);
-        return;
-      }
-      this.float(val);
-      return;
-    }
-    if (typeof val === 'string') {
-      // Encode strings as buffers
-      this.raw(new Buffer(val));
-      return;
-    }
-    if (typeof val === 'object') {
-      if (val instanceof Buffer) {
-        this.raw(val);
-        return;
-      }
-      if (Array.isArray(val)) {
-        this.array(val);
-        return;
-      }
-      this.map(val);
-      return;
-    }
-    console.dir(val);
-    throw new Error("Unknown value");
-  }
-};
 
-function Parser(emit) {
-  this.emit = emit;
-  this.left = 0;
-  this.buffer = [];
-  this.consume = null;
-}
-Parser.prototype = {
-  constructor: Parser,
-  push: function (byte) {
-    // Accept buffers as batch bytes
-    if (byte instanceof Buffer) {
-      for (var i = 0, l = byte.length; i < l; i++) {
-        this.push(byte[i]);
-      }
-      return;
-    }
-    // Hook to consume message bodies
-    if (this.consume) {
-      if (this.left > 0) {
-        this.buffer.push(byte);
-        this.left--;
-      }
-      if (this.left === 0) {
-        this[this.consume]();
-        this.buffer.length = 0;
-        this.consume = null;
-      }
-      return;
-    }
-    if (byte < 0x80) {
-      // fixnum
-      this.emit(byte);
-      return;
-    }
-    if (byte >= 0xe0) {
-      // negative fixnum
-      this.emit(byte - 0x100);
-      return;
-    }
-    if (byte >= 0xc0) {
-      switch (byte) {
-        case 0xc0: this.emit(null); return;
-        case 0xc2: this.emit(false); return;
-        case 0xc3: this.emit(true); return;
-        case 0xca: this.consume = 'float'; this.left = 4; return;
-        case 0xca: this.consume = 'double'; this.left = 8; return;
-        case 0xcc: this.consume = 'uint8'; this.left = 1; return;
-        case 0xcd: this.consume = 'uint16'; this.left = 2; return;
-        case 0xce: this.consume = 'uint32'; this.left = 4; return;
-        case 0xcf: this.consume = 'uint64'; this.left = 8; return;
-        case 0xd0: this.consume = 'int8'; this.left = 1; return;
-        case 0xd1: this.consume = 'int16'; this.left = 2; return;
-        case 0xd2: this.consume = 'int32'; this.left = 4; return;
-        case 0xd3: this.consume = 'int64'; this.left = 8; return;
-        case 0xda: this.consume = 'raw16'; this.left = 2; return;
-        case 0xdb: this.consume = 'raw32'; this.left = 4; return;
-        case 0xdc: this.consume = 'array16'; this.left = 2; return;
-        case 0xdd: this.consume = 'array32'; this.left = 4; return;
-        case 0xde: this.consume = 'map16'; this.left = 2; return;
-        case 0xdf: this.consume = 'map32'; this.left = 4; return;
-      }
-      throw new Error("Invalid variable code");
-    }
-    if (byte >= 0xa0) {
-      // FixRaw
-      this.consume = 'raw';
-      this.left = byte & 0x1f;
-      return;
-    }
-    if (byte >= 0x90) {
-      // FixArray
-      this.array(byte & 0xf);
-      return;
-    }
-    if (byte >= 0x80) {
-      // FixMap
-      this.map(byte & 0xf);
-      return;
-    }
-    throw new Error("Unknown sequence encountered");
-  },
-  uint8: function () {
-    this.emit(this.buffer[0]);
-  },
-  uint16: function () {
-    this.emit((this.buffer[0] << 8) |
-              (this.buffer[1]));
-  },
-  uint32: function () {
-    this.emit((this.buffer[0] << 24) |
-              (this.buffer[1] << 16) |
-              (this.buffer[2] << 8) |
-              (this.buffer[3]));
-  },
-  int8: function () {
-    this.emit(this.buffer[0] - 0x100);
-  },
-  int16: function () {
-    this.emit((this.buffer[0] << 8) |
-              (this.buffer[1]) - 0x10000);
-  },
-  int32: function () {
-    // TODO: Find out if this overflow trick always works.
-    this.emit((this.buffer[0] << 24) |
-              (this.buffer[1] << 16) |
-              (this.buffer[2] << 8) |
-              (this.buffer[3]));
-  },
-  array16: function () {
-    this.array((this.buffer[0] << 8) |
-               (this.buffer[1]));
-  },
-  array32: function () {
-    this.array((this.buffer[0] << 24) |
-               (this.buffer[1] << 16) |
-               (this.buffer[2] << 8) |
-               (this.buffer[3]));
-  },
-  map16: function () {
-    this.map((this.buffer[0] << 8) |
-             (this.buffer[1]));
-  },
-  map32: function () {
-    this.map((this.buffer[0] << 24) |
-             (this.buffer[1] << 16) |
-             (this.buffer[2] << 8) |
-             (this.buffer[3]));
-  },
-  raw: function () {
-    var data = new Buffer(this.buffer);
-    if (this.encoding) {
-      this.emit(data.toString(this.encoding));
-    } else {
-      this.emit(data);
-    }
-  },
-  array: function (items) {
-    var results = [];
-    if (items === 0) {
-      this.emit(results);
-      return;
-    }
-    var oldEmit = this.emit;
-    this.emit = function (result) {
-      results.push(result);
-      items--;
-      if (items === 0) {
-        this.emit = oldEmit;
-        this.emit(results);
-      }
-    };
-  },
-  map: function (items) {
-    var results = {};
-    if (items === 0) {
-      this.emit(results);
-      return;
-    }
-    var oldEmit = this.emit;
-    var key;
-    this.emit = function (result) {
-      if (key === undefined) {
-        key = result.toString();
-        return;
-      }
-      results[key] = result;
-      key = undefined;
-      items--;
-      if (items === 0) {
-        this.emit = oldEmit;
-        this.emit(results);
-      }
-    };
-  }
-};
+exports.decode = decode;
 
-module.exports = {
-  Packer: Packer,
-  Parser: Parser,
-  pack: function (value) {
-    var bytes = [];
-    function accum(byte) {
-      bytes.push(byte);
+// http://wiki.msgpack.org/display/MSGPACK/Format+specification
+// I've extended the protocol to have two new types that were previously reserved.
+//   buffer 16  11011000  0xd8
+//   buffer 32  11011001  0xd9
+// These work just like raw16 and raw32 except they are node buffers instead of strings.
+//
+// Also I've added a type for `undefined`
+//   undefined  11000100  0xc4
+
+function decode(buffer, offset) {
+  var offset = 0;
+  function map(length) {
+    var value = {};
+    for (var i = 0; i < length; i++) {
+      var key = parse();
+      value[key] = parse();
     }
-    var packer = new Packer(accum);
-    packer.pack(value);
-    var length = 0;
-    bytes.forEach(function (byte) {
-      if (typeof byte === 'number') {
-        length++;
-      } else {  
-        length += byte.length;
-      }
-    });
-    var buffer = new Buffer(length);
-    for(var i = 0; i < length; i++) {
-      buffer[i] = 0;
-    }
-    var offset = 0;
-    bytes.forEach(function (byte) {
-      if (typeof byte === 'number') {
-        buffer[offset] = byte;
-        offset++;
-      } else {
-        byte.copy(buffer, offset);
-        offset += byte.length;
-      }
-    });
-    return buffer;
-  },
-  unpack: function (buffer, encoding) {
-    var value;
-    var parser = new Parser(function (result) {
-      value = result;
-    });
-    parser.encoding = encoding;
-    parser.push(buffer);
     return value;
   }
-};
+  function buf(length) {
+    var value = buffer.slice(offset, offset + length);
+    offset += length;
+    return value;
+  }
+  function raw(length) {
+    var value = buffer.toString('utf8', offset, offset + length);
+    offset += length;
+    return value;
+  }
+  function array(length) {
+    var value = new Array(length);
+    for (var i = 0; i < length; i++) {
+      value[i] = parse();
+    }
+    return value;
+  }
+  function parse() {
+    var type = buffer[offset];
+    var value, length;
+    switch (type) {
+    // nil
+    case 0xc0:
+      offset++;
+      return null;
+    // false
+    case 0xc2:
+      offset++;
+      return false;
+    // true
+    case 0xc3:
+      offset++;
+      return true;
+    // undefined
+    case 0xc4:
+      offset++;
+      return undefined;
+    // float      
+    case 0xca:
+      value = buffer.readFloatBE(offset + 1);
+      offset += 5;
+      return value;
+    // double
+    case 0xcb:
+      value = buffer.readDoubleBE(offset + 1);
+      offset += 9;
+      return value;
+    // uint8
+    case 0xcc:
+      value = buffer[offset + 1];
+      offset += 2;
+      return value;
+    // uint 16
+    case 0xcd:
+      value = buffer.readUInt16BE(offset + 1);
+      offset += 3;
+      return value;
+    // uint 32
+    case 0xce:
+      value = buffer.readUInt32BE(offset + 1);
+      offset += 5;
+      return value;
+    // uint64
+    case 0xcf:
+      value = buffer.readUInt64BE(offset + 1);
+      offset += 9;
+      return value;
+    // int 8
+    case 0xd0:
+      value = buffer.readInt8(offset + 1);
+      offset += 2;
+      return value;
+    // int 16
+    case 0xd1:
+      value = buffer.readInt16BE(offset + 1);
+      offset += 3;
+      return value;
+    // int 32
+    case 0xd2:
+      value = buffer.readInt32BE(offset + 1);
+      offset += 5;
+      return value;
+    // int 64
+    case 0xd3:
+      value = buffer.readInt64BE(offset + 1);
+      offset += 9;
+      return value;
+    // map 16
+    case 0xde:
+      length = buffer.readUInt16BE(offset + 1);
+      offset += 3;
+      return map(length);
+    // map 32
+    case 0xdf:
+      length = buffer.readUInt32BE(offset + 1);
+      offset += 5;
+      return map(length);
+    // array 16
+    case 0xdc:
+      length = buffer.readUInt16BE(offset + 1);
+      offset += 3;
+      return array(length);
+    // array 32
+    case 0xdd:
+      length = buffer.readUInt32BE(offset + 1);
+      offset += 5;
+      return array(length);
+    // buffer 16
+    case 0xd8:
+      length = buffer.readUInt16BE(offset + 1);
+      offset += 3;
+      return buf(length);
+    // buffer 32
+    case 0xd9:
+      length = buffer.readUInt32BE(offset + 1);
+      offset += 5;
+      return buf(length);
+    // raw 16
+    case 0xda:
+      length = buffer.readUInt16BE(offset + 1);
+      offset += 3;
+      return raw(length);
+    // raw 32
+    case 0xdb:
+      length = buffer.readUInt32BE(offset + 1);
+      offset += 5;
+      return raw(length);
+    }
+    // FixRaw
+    if ((type & 0xe0) === 0xa0) {
+      length = type & 0x1f;
+      offset++;
+      return raw(length);
+    }
+    // FixMap
+    if ((type & 0xf0) === 0x80) {
+      length = type & 0x0f;
+      offset++;
+      return map(length);
+    }
+    // FixArray
+    if ((type & 0xf0) === 0x90) {
+      length = type & 0x0f;
+      offset++;
+      return array(length);
+    }
+    // Positive FixNum
+    if ((type & 0x80) === 0x00) {
+      offset++;
+      return type;
+    }
+    // Negative Fixnum
+    if ((type & 0xe0) === 0xe0) {
+      value = buffer.readInt8(offset);
+      offset++;
+      return value;
+    }
+    throw new Error("Unknown type 0x" + type.toString(16));
+  }
+  var value = parse();
+  if (offset !== buffer.length) throw new Error((buffer.length - offset) + " trailing bytes");
+  return value;
+}
+
+function encode(value, buffer, offset) {
+  var type = typeof value;
+
+  // Strings Bytes
+  if (type === "string") {
+    var length = Buffer.byteLength(value);
+    // fix raw
+    if (length < 0x20) {
+      buffer[offset] = length | 0xa0;
+      buffer.write(value, offset + 1);
+      return 1 + length;
+    }
+    // raw 16
+    if (length < 0x10000) {
+      buffer[offset] = 0xda;
+      buffer.writeUInt16BE(length, offset + 1);
+      buffer.write(value, offset + 3);
+      return 3 + length;
+    }
+    // raw 32
+    if (length < 0x100000000) {
+      buffer[offset] = 0xdb;
+      buffer.writeUInt32BE(length, offset + 1);
+      buffer.write(value, offset + 5);
+      return 5 + length;
+    }
+  }
+
+  if (Buffer.isBuffer(value)) {
+    var length = value.length;
+    // buffer 16
+    if (length < 0x10000) {
+      buffer[offset] = 0xd8;
+      buffer.writeUInt16BE(length, offset + 1);
+      value.copy(buffer, offset + 3);
+      return 3 + length;
+    }
+    // buffer 32
+    if (length < 0x100000000) {
+      buffer[offset] = 0xd9;
+      buffer.writeUInt32BE(length, offset + 1);
+      value.copy(buffer, offset + 5);
+      return 5 + length;
+    }
+  }
+  
+  if (type === "number") {
+    // Floating Point
+    if ((value << 0) !== value) {
+      buffer[offset] =  0xcb;
+      buffer.writeDoubleBE(value, offset + 1);
+      return 9;
+    }
+
+    // Integers
+    if (value >=0) {
+      // positive fixnum
+      if (value < 0x80) {
+        buffer[offset] = value;
+        return 1;
+      }
+      // uint 8
+      if (value < 0x100) {
+        buffer[offset] = 0xcc;
+        buffer[offset + 1] = value;
+        return 2;
+      }
+      // uint 16
+      if (value < 0x10000) {
+        buffer[offset] = 0xcd;
+        buffer.writeUInt16BE(value, offset + 1);
+        return 3;
+      }
+      // uint 32
+      if (value < 0x100000000) {
+        buffer[offset] = 0xce;
+        buffer.writeUInt32BE(value, offset + 1);
+        return 5;
+      }
+      // uint 64
+      if (value < 0x10000000000000000) {
+        buffer[offset] = 0xcf;
+        buffer.writeUInt64BE(value, offset + 1);
+        return 9;
+      }
+      throw new Error("Number too big 0x" + value.toString(16));
+    }
+    // negative fixnum
+    if (value >= -0x20) {
+      buffer.writeInt8(value, offset);
+      return 1;
+    }
+    // int 8
+    if (value >= -0x80) {
+      buffer[offset] = 0xd0;
+      buffer.writeInt8(value, offset + 1);
+      return 2;
+    }
+    // int 16
+    if (value >= -0x8000) {
+      buffer[offset] = 0xd1;
+      buffer.writeInt16BE(value, offset + 1);
+      return 3;
+    }
+    // int 32
+    if (value >= -0x80000000) {
+      buffer[offset] = 0xd2;
+      buffer.writeInt32BE(value, offset + 1);
+      return 5;
+    }
+    // int 64
+    if (value >= -0x8000000000000000) {
+      buffer[offset] = 0xd3;
+      buffer.writeInt64BE(value, offset + 1);
+      return 9;
+    }
+    throw new Error("Number too small -0x" + value.toString(16).substr(1));
+  }
+  
+  // undefined
+  if (type === "undefined") {
+    buffer[offset] = 0xc4;
+    return 1;
+  }
+  
+  // null
+  if (value === null) {
+    buffer[offset] = 0xc0;
+    return 1;
+  }
+
+  // Boolean
+  if (type === "boolean") {
+    buffer[offset] = value ? 0xc3 : 0xc2;
+    return 1;
+  }
+  
+  // Container Types
+  if (type === "object") {
+    var length, size = 0;
+    var isArray = Array.isArray(value);
+
+    if (isArray) {
+      length = value.length;
+    }
+    else {
+      var keys = Object.keys(value);
+      length = keys.length;
+    }
+
+    var size;
+    if (length < 0x10) {
+      buffer[offset] = length | (isArray ? 0x90 : 0x80);
+      size = 1;
+    }
+    else if (length < 0x10000) {
+      buffer[offset] = isArray ? 0xdc : 0xde;
+      buffer.writeUInt16BE(length, offset + 1);
+      size = 3;
+    }
+    else if (length < 0x100000000) {
+      buffer[offset] = isArray ? 0xdd : 0xdf;
+      buffer.writeUInt32BE(length, offset + 1);
+      size = 5;
+    }
+
+    if (isArray) {
+      for (var i = 0; i < length; i++) {
+        size += encode(value[i], buffer, offset + size);
+      }
+    }
+    else {
+      for (var i = 0; i < length; i++) {
+        var key = keys[i];
+        size += encode(key, buffer, offset + size);
+        size += encode(value[key], buffer, offset + size);
+      }
+    }
+    
+    return size;
+  }
+  throw new Error("Unknown type " + type);
+}
+
+function sizeof(value) {
+  var type = typeof value;
+
+  // Raw Bytes
+  if (type === "string") {
+    var length = Buffer.byteLength(value);
+    if (length < 0x20) {
+      return 1 + length;
+    }
+    if (length < 0x10000) {
+      return 3 + length;
+    }
+    if (length < 0x100000000) {
+      return 5 + length;
+    }
+  }
+  
+  if (Buffer.isBuffer(value)) {
+    var length = value.length;
+    if (length < 0x10000) {
+      return 3 + length;
+    }
+    if (length < 0x100000000) {
+      return 5 + length;
+    }
+  }
+  
+  if (type === "number") {
+    // Floating Point
+    // double
+    if (value << 0 !== value) return 9;
+
+    // Integers
+    if (value >=0) {
+      // positive fixnum
+      if (value < 0x80) return 1;
+      // uint 8
+      if (value < 0x100) return 2;
+      // uint 16
+      if (value < 0x10000) return 3;
+      // uint 32
+      if (value < 0x100000000) return 5;
+      // uint 64
+      if (value < 0x10000000000000000) return 9;
+      throw new Error("Number too big 0x" + value.toString(16));
+    }
+    // negative fixnum
+    if (value >= -0x20) return 1;
+    // int 8
+    if (value >= -0x80) return 2;
+    // int 16
+    if (value >= -0x8000) return 3;
+    // int 32
+    if (value >= -0x80000000) return 5;
+    // int 64
+    if (value >= -0x8000000000000000) return 9;
+    throw new Error("Number too small -0x" + value.toString(16).substr(1));
+  }
+  
+  // Boolean, null, undefined
+  if (type === "boolean" || type === "undefined" || value === null) return 1;
+  
+  // Container Types
+  if (type === "object") {
+    var length, size = 0;
+    if (Array.isArray(value)) {
+      length = value.length;
+      for (var i = 0; i < length; i++) {
+        size += sizeof(value[i]);
+      }
+    }
+    else {
+      var keys = Object.keys(value);
+      length = keys.length;
+      for (var i = 0; i < length; i++) {
+        var key = keys[i];
+        size += sizeof(key) + sizeof(value[key]);
+      }
+    }
+    if (length < 0x10) {
+      return 1 + size;
+    }
+    if (length < 0x10000) {
+      return 3 + size;
+    }
+    if (length < 0x100000000) {
+      return 5 + size;
+    }
+    throw new Error("Array or object too long 0x" + length.toString(16));
+  }
+  throw new Error("Unknown type " + type);
+}
+
+
