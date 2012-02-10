@@ -15,6 +15,14 @@ var tests = [
   [1,2,3], [], {name: "Tim", age: 29}, {},
   {a: 1, b: 2, c: [1, 2, 3]},
 ];
+for (var i = 0, l = tests.length; i < l; i++) {
+  var test = tests[i];
+  if (typeof test === 'number') {
+    tests.push(test + 1);
+    tests.push(test + 1);
+    tests.push(test + 0.5);
+  }
+}
 [0x100, 0x1000, 0x10000, 0x100000].forEach(function (length) {
   var list = new Array(length), obj = {};
   for (var i = 0; i < length; i++) {
