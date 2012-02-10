@@ -19,7 +19,7 @@ for (var i = 0, l = tests.length; i < l; i++) {
   var test = tests[i];
   if (typeof test === 'number') {
     tests.push(test + 1);
-    tests.push(test + 1);
+    tests.push(test - 1);
     tests.push(test + 0.5);
   }
 }
@@ -35,7 +35,14 @@ for (var i = 0, l = tests.length; i < l; i++) {
 
 var width = process.stdout.getWindowSize()[0];
 var mistakes = 0;
+function dump(value) {
+  if (typeof value === 'undefined' || Buffer.isBuffer(value)) {
+    return util.inspect(value).replace(/\n */g, '');
+  }
+  return JSON.stringify(value);
+}
 tests.forEach(function (test) {
+  console.log(dump(test).substr(0, width));
   var encoded = msgpack.encode(test);
   console.log(encoded.inspect().substr(0, width));
   var decoded = msgpack.decode(encoded);
@@ -45,11 +52,17 @@ tests.forEach(function (test) {
       assert.equal(test.constructor, decoded.constructor);
     }
   } catch (err) {
-    console.log();
-    console.log(util.inspect(test).replace(/\n */g, '').substr(0, width));
-    console.log(util.inspect(decoded).replace(/\n */g, '').substr(0, width));
-    console.log(err.stack);
+    console.error();
+    console.error(dump(test).substr(0, width));
+    console.error(encoded.inspect().substr(0, width));
+    console.error(dump(decoded).substr(0, width));
+    console.error(err.stack);
     mistakes++;
   }
 });
+if (mistakes) {
+  console.error(mistakes + " tests failed!");
+} else {
+  console.log("\nAll tests passed successfully!");
+}
 process.exit(mistakes);
