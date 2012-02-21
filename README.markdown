@@ -26,12 +26,14 @@ Also I've added a type for `undefined` that works just like the `null` type.
 
 ## Usage
 
-    var msgpack = require('msgpack');
-    var assert = require('assert');
+``` javascript
+var msgpack = require('msgpack');
+var assert = require('assert');
 
-    var initial = {Hello: "World"};
-    var encoded = msgpack.encode(initial);
-    var decoded = msgpack.decode(encoded);
+var initial = {Hello: "World"};
+var encoded = msgpack.encode(initial);
+var decoded = msgpack.decode(encoded);
 
-    assert.deepEqual(initial, decoded);
+assert.deepEqual(initial, decoded);
+```
 
