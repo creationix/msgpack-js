@@ -15,177 +15,181 @@ exports.decode = decode;
 // Also I've added a type for `undefined`
 //   undefined  11000100  0xc4
 
-function decode(buffer, offset) {
-  var offset = 0;
-  function map(length) {
-    var value = {};
-    for (var i = 0; i < length; i++) {
-      var key = parse();
-      value[key] = parse();
-    }
+function Decoder(buffer, offset) {
+  this.offset = offset || 0;
+  this.buffer = buffer;
+}
+Decoder.prototype.map = function (length) {
+  var value = {};
+  for (var i = 0; i < length; i++) {
+    var key = this.parse();
+    value[key] = this.parse();
+  }
+  return value;
+};
+Decoder.prototype.buf = function (length) {
+  var value = this.buffer.slice(this.offset, this.offset + length);
+  this.offset += length;
+  return value;
+};
+Decoder.prototype.raw = function (length) {
+  var value = this.buffer.toString('utf8', this.offset, this.offset + length);
+  this.offset += length;
+  return value;
+};
+Decoder.prototype.array = function (length) {
+  var value = new Array(length);
+  for (var i = 0; i < length; i++) {
+    value[i] = this.parse();
+  }
+  return value;
+};
+Decoder.prototype.parse = function () {
+  var type = this.buffer[this.offset];
+  var value, length;
+  // FixRaw
+  if ((type & 0xe0) === 0xa0) {
+    length = type & 0x1f;
+    this.offset++;
+    return this.raw(length);
+  }
+  // FixMap
+  if ((type & 0xf0) === 0x80) {
+    length = type & 0x0f;
+    this.offset++;
+    return this.map(length);
+  }
+  // FixArray
+  if ((type & 0xf0) === 0x90) {
+    length = type & 0x0f;
+    this.offset++;
+    return this.array(length);
+  }
+  // Positive FixNum
+  if ((type & 0x80) === 0x00) {
+    this.offset++;
+    return type;
+  }
+  // Negative Fixnum
+  if ((type & 0xe0) === 0xe0) {
+    value = this.buffer.readInt8(this.offset);
+    this.offset++;
     return value;
   }
-  function buf(length) {
-    var value = buffer.slice(offset, offset + length);
-    offset += length;
+  switch (type) {
+  // raw 16
+  case 0xda:
+    length = this.buffer.readUInt16BE(this.offset + 1);
+    this.offset += 3;
+    return this.raw(length);
+  // raw 32
+  case 0xdb:
+    length = this.buffer.readUInt32BE(this.offset + 1);
+    this.offset += 5;
+    return this.raw(length);
+  // nil
+  case 0xc0:
+    this.offset++;
+    return null;
+  // false
+  case 0xc2:
+    this.offset++;
+    return false;
+  // true
+  case 0xc3:
+    this.offset++;
+    return true;
+  // undefined
+  case 0xc4:
+    this.offset++;
+    return undefined;
+  // uint8
+  case 0xcc:
+    value = this.buffer[this.offset + 1];
+    this.offset += 2;
+    return value;
+  // uint 16
+  case 0xcd:
+    value = this.buffer.readUInt16BE(this.offset + 1);
+    this.offset += 3;
+    return value;
+  // uint 32
+  case 0xce:
+    value = this.buffer.readUInt32BE(this.offset + 1);
+    this.offset += 5;
+    return value;
+  // uint64
+  case 0xcf:
+    value = this.buffer.readUInt64BE(this.offset + 1);
+    this.offset += 9;
+    return value;
+  // int 8
+  case 0xd0:
+    value = this.buffer.readInt8(this.offset + 1);
+    this.offset += 2;
+    return value;
+  // int 16
+  case 0xd1:
+    value = this.buffer.readInt16BE(this.offset + 1);
+    this.offset += 3;
+    return value;
+  // int 32
+  case 0xd2:
+    value = this.buffer.readInt32BE(this.offset + 1);
+    this.offset += 5;
+    return value;
+  // int 64
+  case 0xd3:
+    value = this.buffer.readInt64BE(this.offset + 1);
+    this.offset += 9;
+    return value;
+  // map 16
+  case 0xde:
+    length = this.buffer.readUInt16BE(this.offset + 1);
+    this.offset += 3;
+    return this.map(length);
+  // map 32
+  case 0xdf:
+    length = this.buffer.readUInt32BE(this.offset + 1);
+    this.offset += 5;
+    return this.map(length);
+  // array 16
+  case 0xdc:
+    length = this.buffer.readUInt16BE(this.offset + 1);
+    this.offset += 3;
+    return this.array(length);
+  // array 32
+  case 0xdd:
+    length = this.buffer.readUInt32BE(this.offset + 1);
+    this.offset += 5;
+    return this.array(length);
+  // buffer 16
+  case 0xd8:
+    length = this.buffer.readUInt16BE(this.offset + 1);
+    this.offset += 3;
+    return this.buf(length);
+  // buffer 32
+  case 0xd9:
+    length = this.buffer.readUInt32BE(this.offset + 1);
+    this.offset += 5;
+    return this.buf(length);
+  // float
+  case 0xca:
+    value = this.buffer.readFloatBE(this.offset + 1);
+    this.offset += 5;
+    return value;
+  // double
+  case 0xcb:
+    value = this.buffer.readDoubleBE(this.offset + 1);
+    this.offset += 9;
     return value;
   }
-  function raw(length) {
-    var value = buffer.toString('utf8', offset, offset + length);
-    offset += length;
-    return value;
-  }
-  function array(length) {
-    var value = new Array(length);
-    for (var i = 0; i < length; i++) {
-      value[i] = parse();
-    }
-    return value;
-  }
-  function parse() {
-    var type = buffer[offset];
-    var value, length;
-    switch (type) {
-    // nil
-    case 0xc0:
-      offset++;
-      return null;
-    // false
-    case 0xc2:
-      offset++;
-      return false;
-    // true
-    case 0xc3:
-      offset++;
-      return true;
-    // undefined
-    case 0xc4:
-      offset++;
-      return undefined;
-    // float      
-    case 0xca:
-      value = buffer.readFloatBE(offset + 1);
-      offset += 5;
-      return value;
-    // double
-    case 0xcb:
-      value = buffer.readDoubleBE(offset + 1);
-      offset += 9;
-      return value;
-    // uint8
-    case 0xcc:
-      value = buffer[offset + 1];
-      offset += 2;
-      return value;
-    // uint 16
-    case 0xcd:
-      value = buffer.readUInt16BE(offset + 1);
-      offset += 3;
-      return value;
-    // uint 32
-    case 0xce:
-      value = buffer.readUInt32BE(offset + 1);
-      offset += 5;
-      return value;
-    // uint64
-    case 0xcf:
-      value = buffer.readUInt64BE(offset + 1);
-      offset += 9;
-      return value;
-    // int 8
-    case 0xd0:
-      value = buffer.readInt8(offset + 1);
-      offset += 2;
-      return value;
-    // int 16
-    case 0xd1:
-      value = buffer.readInt16BE(offset + 1);
-      offset += 3;
-      return value;
-    // int 32
-    case 0xd2:
-      value = buffer.readInt32BE(offset + 1);
-      offset += 5;
-      return value;
-    // int 64
-    case 0xd3:
-      value = buffer.readInt64BE(offset + 1);
-      offset += 9;
-      return value;
-    // map 16
-    case 0xde:
-      length = buffer.readUInt16BE(offset + 1);
-      offset += 3;
-      return map(length);
-    // map 32
-    case 0xdf:
-      length = buffer.readUInt32BE(offset + 1);
-      offset += 5;
-      return map(length);
-    // array 16
-    case 0xdc:
-      length = buffer.readUInt16BE(offset + 1);
-      offset += 3;
-      return array(length);
-    // array 32
-    case 0xdd:
-      length = buffer.readUInt32BE(offset + 1);
-      offset += 5;
-      return array(length);
-    // buffer 16
-    case 0xd8:
-      length = buffer.readUInt16BE(offset + 1);
-      offset += 3;
-      return buf(length);
-    // buffer 32
-    case 0xd9:
-      length = buffer.readUInt32BE(offset + 1);
-      offset += 5;
-      return buf(length);
-    // raw 16
-    case 0xda:
-      length = buffer.readUInt16BE(offset + 1);
-      offset += 3;
-      return raw(length);
-    // raw 32
-    case 0xdb:
-      length = buffer.readUInt32BE(offset + 1);
-      offset += 5;
-      return raw(length);
-    }
-    // FixRaw
-    if ((type & 0xe0) === 0xa0) {
-      length = type & 0x1f;
-      offset++;
-      return raw(length);
-    }
-    // FixMap
-    if ((type & 0xf0) === 0x80) {
-      length = type & 0x0f;
-      offset++;
-      return map(length);
-    }
-    // FixArray
-    if ((type & 0xf0) === 0x90) {
-      length = type & 0x0f;
-      offset++;
-      return array(length);
-    }
-    // Positive FixNum
-    if ((type & 0x80) === 0x00) {
-      offset++;
-      return type;
-    }
-    // Negative Fixnum
-    if ((type & 0xe0) === 0xe0) {
-      value = buffer.readInt8(offset);
-      offset++;
-      return value;
-    }
-    throw new Error("Unknown type 0x" + type.toString(16));
-  }
-  var value = parse();
-  if (offset !== buffer.length) throw new Error((buffer.length - offset) + " trailing bytes");
+  throw new Error("Unknown type 0x" + type.toString(16));
+};
+function decode(buffer) {
+  var decoder = new Decoder(buffer);
+  var value = decoder.parse();
+  if (decoder.offset !== buffer.length) throw new Error((buffer.length - decoder.offset) + " trailing bytes");
   return value;
 }
 
