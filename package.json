@@ -5,11 +5,14 @@
   "version": "0.1.1",
   "repository": {
     "type": "git",
-    "url": "git://github.com/creationix/msgpack.git"
+    "url": "git://github.com/creationix/msgpack-js.git"
   },
   "main": "msgpack.js",
   "engines": {
     "node": ">=0.6.0"
+  },
+  "scripts": {
+    "test": "node test.js"
   },
   "dependencies": {},
   "devDependencies": {},
