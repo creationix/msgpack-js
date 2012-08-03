@@ -1,5 +1,7 @@
 # msgpack for node
 
+[![Build Status](https://secure.travis-ci.org/creationix/msgpack-js.png)](http://travis-ci.org/creationix/msgpack-js)
+
 A handwritten msgpack encoder and decoder for Node.JS.
 
 The original format can be found at <http://wiki.msgpack.org/display/MSGPACK/Format+specification>
