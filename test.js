@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 var msgpack = require('./msgpack');
 var util = require('util');
 var assert = require('assert');
@@ -65,4 +66,4 @@ if (mistakes) {
 } else {
   console.log("\nAll tests passed successfully!");
 }
-process.exit(mistakes);
+process.exit(mistakes.length);
