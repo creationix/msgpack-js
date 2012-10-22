@@ -34,7 +34,10 @@ for (var i = 0, l = tests.length; i < l; i++) {
   tests.push(obj);
 });
 
-var width = process.stdout.getWindowSize()[0];
+var width = 80;
+if (process.stdout.isTTY) {
+  width = process.stdout.getWindowSize()[0];
+}
 var mistakes = 0;
 function dump(value) {
   if (typeof value === 'undefined' || Buffer.isBuffer(value)) {
