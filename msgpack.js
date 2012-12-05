@@ -5,6 +5,7 @@ exports.encode = function (value) {
 }
 
 exports.decode = decode;
+exports.Decoder = Decoder;
 
 // http://wiki.msgpack.org/display/MSGPACK/Format+specification
 // I've extended the protocol to have two new types that were previously reserved.
@@ -18,6 +19,7 @@ exports.decode = decode;
 function Decoder(buffer, offset) {
   this.offset = offset || 0;
   this.buffer = buffer;
+  this.bytesRemaining = buffer.length - this.offset;
 }
 Decoder.prototype.map = function (length) {
   var value = {};
@@ -185,6 +187,11 @@ Decoder.prototype.parse = function () {
     return value;
   }
   throw new Error("Unknown type 0x" + type.toString(16));
+};
+Decoder.prototype.decode = function () {
+  var rv = this.parse();
+  this.bytesRemaining = this.buffer.length - this.offset;
+  return rv;
 };
 function decode(buffer) {
   var decoder = new Decoder(buffer);
@@ -469,5 +476,4 @@ function sizeof(value) {
   }
   throw new Error("Unknown type " + type);
 }
-
 
