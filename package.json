@@ -10,5 +10,5 @@
   "main": "msgpack.js",
   "dependencies": {
     "bops": "~0.0.5"
-  },
+  }
 }
