@@ -2,13 +2,30 @@
   "author": "Tim Caswell <tim@creationix.com>",
   "name": "msgpack-js",
   "description": "msgpack encoder and decoder in pure javascript",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "repository": {
     "type": "git",
     "url": "git://github.com/creationix/msgpack-js.git"
   },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "testling": {
+    "files": "test.js",
+    "browsers": [
+      "ie/9..latest",
+      "firefox/19..latest",
+      "chrome/25..latest",
+      "safari/latest",
+      "iphone/6",
+      "ipad/6"
+    ]
+  },
   "main": "msgpack.js",
   "dependencies": {
-    "bops": "~0.0.5"
+    "bops": "~0.0.6"
+  },
+  "devDependencies": {
+    "tape": "~1.0.2"
   }
 }
