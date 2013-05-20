@@ -1,4 +1,4 @@
-# msgpack for node
+# msgpack for JavaScript
 
 [![node support](https://travis-ci.org/creationix/msgpack-js.png)](https://travis-ci.org/creationix/msgpack-js)
 
