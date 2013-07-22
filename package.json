@@ -2,7 +2,7 @@
   "author": "Tim Caswell <tim@creationix.com>",
   "name": "msgpack-js",
   "description": "msgpack encoder and decoder in pure javascript",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "repository": {
     "type": "git",
     "url": "git://github.com/creationix/msgpack-js.git"
