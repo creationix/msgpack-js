@@ -3,7 +3,11 @@
 var bops = require('bops');
 
 exports.encode = function (value) {
-  var buffer = bops.create(sizeof(value));
+  var toJSONed = []
+  var size = sizeof(value)
+  if(size == 0)
+    return undefined
+  var buffer = bops.create(size);
   encode(value, buffer, 0);
   return buffer;
 };
@@ -197,6 +201,12 @@ function decode(buffer) {
   return value;
 }
 
+function encodeableKeys (value) {
+  return Object.keys(value).filter(function (e) {
+    return 'function' !== typeof value[e] || !!value[e].toJSON
+  })
+}
+
 function encode(value, buffer, offset) {
   var type = typeof value;
   var length, size;
@@ -336,8 +346,12 @@ function encode(value, buffer, offset) {
     return 1;
   }
 
+  if('function' === typeof value.toJSON)
+    return encode(value.toJSON(), buffer, offset)
+
   // Container Types
   if (type === "object") {
+
     size = 0;
     var isArray = Array.isArray(value);
 
@@ -345,7 +359,7 @@ function encode(value, buffer, offset) {
       length = value.length;
     }
     else {
-      var keys = Object.keys(value);
+      var keys = encodeableKeys(value)
       length = keys.length;
     }
 
@@ -379,6 +393,8 @@ function encode(value, buffer, offset) {
 
     return size;
   }
+  if(type === "function")
+    return undefined
   throw new Error("Unknown type " + type);
 }
 
@@ -446,8 +462,14 @@ function sizeof(value) {
   // Boolean, null, undefined
   if (type === "boolean" || type === "undefined" || value === null) return 1;
 
+  if('function' === typeof value.toJSON)
+    return sizeof(value.toJSON())
+
   // Container Types
   if (type === "object") {
+    if('function' === typeof value.toJSON)
+      value = value.toJSON()
+
     size = 0;
     if (Array.isArray(value)) {
       length = value.length;
@@ -456,7 +478,7 @@ function sizeof(value) {
       }
     }
     else {
-      var keys = Object.keys(value);
+      var keys = encodeableKeys(value)
       length = keys.length;
       for (var i = 0; i < length; i++) {
         var key = keys[i];
@@ -474,6 +496,8 @@ function sizeof(value) {
     }
     throw new Error("Array or object too long 0x" + length.toString(16));
   }
+  if(type === "function")
+    return 0
   throw new Error("Unknown type " + type);
 }
 
