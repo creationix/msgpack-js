@@ -15,7 +15,7 @@ var tests = [
   -10, -100, -1000, -10000, -100000, -1000000,
   'hello', 'world', bops.from("Hello"), bops.from("World"),
   [1,2,3], [], {name: "Tim", age: 29}, {},
-  {a: 1, b: 2, c: [1, 2, 3]},
+  {a: 1, b: 2, c: [1, 2, 3]}
 ];
 
 test('codec works as expected', function(assert) {
@@ -39,3 +39,46 @@ test('codec works as expected', function(assert) {
   assert.end();
 
 });
+
+function Foo () {
+  this.instance = true
+}
+
+Foo.prototype.blah = 324
+
+Foo.prototype.doThing = function () {}
+
+function jsonableFunction () {
+  console.log("can be json'ed")
+}
+
+jsonableFunction.toJSON = function () { return this.toString() }
+
+var jsonLikes = [
+  {fun: function () {}, string: 'hello'},
+  {toJSON: function () {
+    return {object: true}
+  }},
+  new Date(0),
+  /regexp/,
+  new Foo(),
+  {fun: jsonableFunction},
+  jsonableFunction,
+]
+
+test('treats functions same as json', function (assert) {
+  jsonLikes.forEach(function (input) {
+    assert.deepEqual(
+      msgpack.decode(msgpack.encode(input)),
+      JSON.parse(JSON.stringify(input)),
+      util.inspect(input)
+    )
+  })
+  assert.end()
+})
+
+test('returns undefined for a function', function (assert) {
+  function noop () {}
+  assert.equal(msgpack.encode(noop), JSON.stringify(noop))
+  assert.end()
+})
