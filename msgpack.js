@@ -14,14 +14,17 @@ exports.encode = function (value) {
 
 exports.decode = decode;
 
-// http://wiki.msgpack.org/display/MSGPACK/Format+specification
-// I've extended the protocol to have two new types that were previously reserved.
-//   buffer 16  11011000  0xd8
-//   buffer 32  11011001  0xd9
-// These work just like raw16 and raw32 except they are node buffers instead of strings.
+// https://gist.github.com/frsyuki/5432559 - v5 spec
 //
-// Also I've added a type for `undefined`
-//   undefined  11000100  0xc4
+// I've used one extension point from `fixext 1` to store `undefined`. On the wire this
+// should translate to exactly 0xd40000 
+//
+// +--------+--------+--------+
+// |  0xd4  |  0x00  |  0x00  |
+// +--------+--------+--------+
+//    ^ fixext |        ^ value part unused (fixed to be 0)
+//             ^ indicates undefined value
+//
 
 function Decoder(buffer, offset) {
   this.offset = offset || 0;
@@ -35,12 +38,12 @@ Decoder.prototype.map = function (length) {
   }
   return value;
 };
-Decoder.prototype.buf = function (length) {
+Decoder.prototype.bin = function (length) {
   var value = bops.subarray(this.buffer, this.offset, this.offset + length);
   this.offset += length;
   return value;
 };
-Decoder.prototype.raw = function (length) {
+Decoder.prototype.str = function (length) {
   var value = bops.to(bops.subarray(this.buffer, this.offset, this.offset + length));
   this.offset += length;
   return value;
@@ -54,12 +57,11 @@ Decoder.prototype.array = function (length) {
 };
 Decoder.prototype.parse = function () {
   var type = this.buffer[this.offset];
-  var value, length;
-  // FixRaw
-  if ((type & 0xe0) === 0xa0) {
-    length = type & 0x1f;
+  var value, length, extType;
+  // Positive FixInt
+  if ((type & 0x80) === 0x00) {
     this.offset++;
-    return this.raw(length);
+    return type;
   }
   // FixMap
   if ((type & 0xf0) === 0x80) {
@@ -73,32 +75,24 @@ Decoder.prototype.parse = function () {
     this.offset++;
     return this.array(length);
   }
-  // Positive FixNum
-  if ((type & 0x80) === 0x00) {
+  // FixStr
+  if ((type & 0xe0) === 0xa0) {
+    length = type & 0x1f;
     this.offset++;
-    return type;
+    return this.str(length);
   }
-  // Negative Fixnum
+  // Negative FixInt
   if ((type & 0xe0) === 0xe0) {
     value = bops.readInt8(this.buffer, this.offset);
     this.offset++;
     return value;
   }
   switch (type) {
-  // raw 16
-  case 0xda:
-    length = bops.readUInt16BE(this.buffer, this.offset + 1);
-    this.offset += 3;
-    return this.raw(length);
-  // raw 32
-  case 0xdb:
-    length = bops.readUInt32BE(this.buffer, this.offset + 1);
-    this.offset += 5;
-    return this.raw(length);
   // nil
   case 0xc0:
     this.offset++;
     return null;
+  // 0xc1: (never used)
   // false
   case 0xc2:
     this.offset++;
@@ -107,10 +101,49 @@ Decoder.prototype.parse = function () {
   case 0xc3:
     this.offset++;
     return true;
-  // undefined
+  // bin 8
   case 0xc4:
-    this.offset++;
-    return undefined;
+    length = bops.readUInt8(this.buffer, this.offset + 1);
+    this.offset += 2;
+    return this.bin(length);
+  // bin 16
+  case 0xc5:
+    length = bops.readUInt16BE(this.buffer, this.offset + 1);
+    this.offset += 3;
+    return this.bin(length);
+  // bin 32
+  case 0xc6:
+    length = bops.readUInt32BE(this.buffer, this.offset + 1);
+    this.offset += 5;
+    return this.bin(length);
+  // ext 8
+  case 0xc7:
+    length = bops.readUInt8(this.buffer, this.offset + 1);
+    extType = bops.readUInt8(this.buffer, this.offset + 2);
+    this.offset += 3;
+    return [extType, this.bin(length)];
+  // ext 16
+  case 0xc8:
+    length = bops.readUInt16BE(this.buffer, this.offset + 1);
+    extType = bops.readUInt8(this.buffer, this.offset + 3);
+    this.offset += 4;
+    return [extType, this.bin(length)];
+  // ext 32
+  case 0xc9:
+    length = bops.readUInt32BE(this.buffer, this.offset + 1);
+    extType = bops.readUInt8(this.buffer, this.offset + 5);
+    this.offset += 6;
+    return [extType, this.bin(length)];
+  // float 32
+  case 0xca:
+    value = bops.readFloatBE(this.buffer, this.offset + 1);
+    this.offset += 5;
+    return value;
+  // float 64 / double
+  case 0xcb:
+    value = bops.readDoubleBE(this.buffer, this.offset + 1);
+    this.offset += 9;
+    return value;
   // uint8
   case 0xcc:
     value = this.buffer[this.offset + 1];
@@ -151,16 +184,48 @@ Decoder.prototype.parse = function () {
     value = bops.readInt64BE(this.buffer, this.offset + 1);
     this.offset += 9;
     return value;
-  // map 16
-  case 0xde:
+
+  // fixext 1 / undefined
+  case 0xd4:
+    extType = bops.readUInt8(this.buffer, this.offset + 1);
+    value = bops.readUInt8(this.buffer, this.offset + 2);
+    this.offset += 3;
+    return (extType === 0 && value === 0) ? undefined : [extType, value];
+  // fixext 2
+  case 0xd5:
+    extType = bops.readUInt8(this.buffer, this.offset + 1);
+    this.offset += 2;
+    return [extType, this.bin(2)];
+  // fixext 4
+  case 0xd6:
+    extType = bops.readUInt8(this.buffer, this.offset + 1);
+    this.offset += 2;
+    return [extType, this.bin(4)];
+  // fixext 8
+  case 0xd7:
+    extType = bops.readUInt8(this.buffer, this.offset + 1);
+    this.offset += 2;
+    return [extType, this.bin(8)];
+  // fixext 16
+  case 0xd8:
+    extType = bops.readUInt8(this.buffer, this.offset + 1);
+    this.offset += 2;
+    return [extType, this.bin(16)];
+  // str 8
+  case 0xd9:
+    length = bops.readUInt8(this.buffer, this.offset + 1);
+    this.offset += 2;
+    return this.str(length);
+  // str 16
+  case 0xda:
     length = bops.readUInt16BE(this.buffer, this.offset + 1);
     this.offset += 3;
-    return this.map(length);
-  // map 32
-  case 0xdf:
+    return this.str(length);
+  // str 32
+  case 0xdb:
     length = bops.readUInt32BE(this.buffer, this.offset + 1);
     this.offset += 5;
-    return this.map(length);
+    return this.str(length);
   // array 16
   case 0xdc:
     length = bops.readUInt16BE(this.buffer, this.offset + 1);
@@ -171,6 +236,16 @@ Decoder.prototype.parse = function () {
     length = bops.readUInt32BE(this.buffer, this.offset + 1);
     this.offset += 5;
     return this.array(length);
+  // map 16:
+  case 0xde:
+    length = bops.readUInt16BE(this.buffer, this.offset + 1);
+    this.offset += 3;
+    return this.map(length);
+  // map 32
+  case 0xdf:
+    length = bops.readUInt32BE(this.buffer, this.offset + 1);
+    this.offset += 5;
+    return this.map(length);
   // buffer 16
   case 0xd8:
     length = bops.readUInt16BE(this.buffer, this.offset + 1);
@@ -181,17 +256,8 @@ Decoder.prototype.parse = function () {
     length = bops.readUInt32BE(this.buffer, this.offset + 1);
     this.offset += 5;
     return this.buf(length);
-  // float
-  case 0xca:
-    value = bops.readFloatBE(this.buffer, this.offset + 1);
-    this.offset += 5;
-    return value;
-  // double
-  case 0xcb:
-    value = bops.readDoubleBE(this.buffer, this.offset + 1);
-    this.offset += 9;
-    return value;
   }
+
   throw new Error("Unknown type 0x" + type.toString(16));
 };
 function decode(buffer) {
@@ -215,20 +281,27 @@ function encode(value, buffer, offset) {
   if (type === "string") {
     value = bops.from(value);
     length = value.length;
-    // fix raw
+    // fixstr
     if (length < 0x20) {
       buffer[offset] = length | 0xa0;
       bops.copy(value, buffer, offset + 1);
       return 1 + length;
     }
-    // raw 16
+    // str 8
+    if (length < 0x100) {
+      buffer[offset] = 0xd9;
+      bops.writeUInt8(buffer, length, offset + 1);
+      bops.copy(value, buffer, offset + 2);
+      return 2 + length;
+    }
+    // str 16
     if (length < 0x10000) {
       buffer[offset] = 0xda;
       bops.writeUInt16BE(buffer, length, offset + 1);
       bops.copy(value, buffer, offset + 3);
       return 3 + length;
     }
-    // raw 32
+    // str 32
     if (length < 0x100000000) {
       buffer[offset] = 0xdb;
       bops.writeUInt32BE(buffer, length, offset + 1);
@@ -239,14 +312,21 @@ function encode(value, buffer, offset) {
 
   if (bops.is(value)) {
     length = value.length;
-    // buffer 16
+    // bin 8
+    if (length < 0x100) {
+      buffer[offset] = 0xc4;
+      bops.writeUInt8(buffer, length, offset + 1);
+      bops.copy(value, buffer, offset + 2);
+      return 2 + length;
+    }
+    // bin 16
     if (length < 0x10000) {
       buffer[offset] = 0xd8;
       bops.writeUInt16BE(buffer, length, offset + 1);
       bops.copy(value, buffer, offset + 3);
       return 3 + length;
     }
-    // buffer 32
+    // bin 32
     if (length < 0x100000000) {
       buffer[offset] = 0xd9;
       bops.writeUInt32BE(buffer, length, offset + 1);
@@ -328,9 +408,10 @@ function encode(value, buffer, offset) {
     throw new Error("Number too small -0x" + value.toString(16).substr(1));
   }
 
-  // undefined
   if (type === "undefined") {
-    buffer[offset] = 0xc4;
+    buffer[offset] = 0xd4;
+    buffer[offset + 1] = 0x00; // fixext special type/value
+    buffer[offset + 2] = 0x00;
     return 1;
   }
 
@@ -363,15 +444,18 @@ function encode(value, buffer, offset) {
       length = keys.length;
     }
 
+    // fixarray
     if (length < 0x10) {
       buffer[offset] = length | (isArray ? 0x90 : 0x80);
       size = 1;
     }
+    // array 16 / map 16
     else if (length < 0x10000) {
       buffer[offset] = isArray ? 0xdc : 0xde;
       bops.writeUInt16BE(buffer, length, offset + 1);
       size = 3;
     }
+    // array 32 / map 32
     else if (length < 0x100000000) {
       buffer[offset] = isArray ? 0xdd : 0xdf;
       bops.writeUInt32BE(buffer, length, offset + 1);
@@ -409,6 +493,9 @@ function sizeof(value) {
     if (length < 0x20) {
       return 1 + length;
     }
+    if (length < 0x100) {
+      return 2 + length;
+    }
     if (length < 0x10000) {
       return 3 + length;
     }
@@ -419,6 +506,9 @@ function sizeof(value) {
 
   if (bops.is(value)) {
     length = value.length;
+    if (length < 0x100) {
+      return 2 + length;
+    }
     if (length < 0x10000) {
       return 3 + length;
     }
@@ -459,8 +549,9 @@ function sizeof(value) {
     throw new Error("Number too small -0x" + value.toString(16).substr(1));
   }
 
-  // Boolean, null, undefined
-  if (type === "boolean" || type === "undefined" || value === null) return 1;
+  // Boolean, null
+  if (type === "boolean" || value === null) return 1;
+  if (type === 'undefined') return 3;
 
   if('function' === typeof value.toJSON)
     return sizeof(value.toJSON())
