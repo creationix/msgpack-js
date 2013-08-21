@@ -39,3 +39,6 @@ simply be appended with `v5`.
 If and when this package diverges from the original, we can start our own versioning. Or
 this module could just be merged into the original `msgpack-js` module.
 
+ [0]: https://github.com/creationix/msgpack-js
+ [1]: https://github.com/creationix/msgpack-js/blob/master/README.markdown
+
