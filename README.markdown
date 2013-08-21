@@ -1,44 +1,33 @@
-# msgpack for JavaScript
+# MSGPACK-JS-V5
 
-[![node support](https://travis-ci.org/creationix/msgpack-js.png)](https://travis-ci.org/creationix/msgpack-js)
+**Please see the [original README.md][1] from the source repository for more
+information.**
 
-[![browser support](https://ci.testling.com/creationix/msgpack-js.png)](https://ci.testling.com/creationix/msgpack-js)
+This is a port of [creationix/msgpack-js][0] to support the new MsgPack v5
+specification.
 
+* New spec: https://github.com/msgpack/msgpack/blob/master/spec.md
+* Old spec: https://github.com/msgpack/msgpack/blob/master/spec-old.md
 
-A handwritten msgpack encoder and decoder for Node.JS and modern browsers.
+Please feel free to open issues/pull requests for support/discussion.
 
-The original format can be found at <http://wiki.msgpack.org/display/MSGPACK/Format+specification>
+# INSTALL
 
-
-## Extension
-
-I've extended the format a little to allow for encoding and decoding of `undefined` and `Buffer` instances.
-
-This required three new type codes that were previously marked as "reserved".
-This change means that using these new types will render your serialized data
-incompatible with other messagepack implementations that don't have the same
-extension.
-
-There are two new types for storing node `Buffer` instances. These work just 
-like "raw 16" and "raw 32" except they are node buffers instead of strings.
-
-    buffer 16  11011000  0xd8
-    buffer 32  11011001  0xd9
-
-Also I've added a type for `undefined` that works just like the `null` type.
-
-    undefined  11000100  0xc4
-
-## Usage
-
-``` javascript
-var msgpack = require('msgpack');
-var assert = require('assert');
-
-var initial = {Hello: "World"};
-var encoded = msgpack.encode(initial);
-var decoded = msgpack.decode(encoded);
-
-assert.deepEqual(initial, decoded);
+```sh
+$ npm i msgpack-js-v5 --save
 ```
+
+# EXTENSION
+
+Since there is no way to encode `undefined` inside the msgpack spec, an extension point i
+used for this purpose.
+
+Specifically, the `fixext 1` type is used with all values being 0 to indicate undefined.
+On the wire, it requires 3 bytes and should looks like this:
+
+```
+0xd4 | 0x00 | 0x00
+```
+
+Where `|` is byte separator.
 
