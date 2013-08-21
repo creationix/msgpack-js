@@ -19,17 +19,24 @@ $ npm i msgpack-js-v5 --save
 
 # EXTENSION
 
-Since there is no way to encode `undefined` inside the msgpack spec, an extension point i
-used for this purpose.
-
-Specifically, the `fixext 1` type is used with all values being 0 to indicate undefined.
-On the wire, it requires 3 bytes and should looks like this:
+Since there is no way to encode `undefined` inside the msgpack spec, an extension point is
+used for this purpose. Specifically, the `fixext 1` type is used with all values being 0
+to indicate `undefined`. On the wire, it requires 3 bytes and should looks like this:
 
 ```
 0xd4 | 0x00 | 0x00
 ```
 
 Where `|` is byte separator.
+
+# EXT / FIXEXT
+
+Extensions are encoded/decoded to and from a simple 2-elements array tuple of the form
+`[type, Buffer]`. Where `type` is the msgpack extension type identifier and `Buffer` is
+the raw decoded value.
+
+Special case for `fixext 1` since it will always be 1-byte long a simple `[type, value]`
+is returned directly instead of wrapping it in node.js `Buffer`.
 
 # VERSIONING
 
