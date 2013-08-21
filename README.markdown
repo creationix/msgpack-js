@@ -31,3 +31,11 @@ On the wire, it requires 3 bytes and should looks like this:
 
 Where `|` is byte separator.
 
+# VERSIONING
+
+This package will follows `msgpack-js` version for the time being. The version string will
+simply be appended with `v5`.
+
+If and when this package diverges from the original, we can start our own versioning. Or
+this module could just be merged into the original `msgpack-js` module.
+
