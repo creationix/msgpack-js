@@ -3,10 +3,8 @@
 var bops = require('bops');
 
 exports.encode = function (value) {
-  var toJSONed = []
-  var size = sizeof(value)
-  if(size == 0)
-    return undefined
+  var size = sizeof(value);
+  if (size === 0) return undefined;
   var buffer = bops.create(size);
   encode(value, buffer, 0);
   return buffer;
@@ -203,8 +201,8 @@ function decode(buffer) {
 
 function encodeableKeys (value) {
   return Object.keys(value).filter(function (e) {
-    return 'function' !== typeof value[e] || !!value[e].toJSON
-  })
+    return typeof value[e] !== 'function' || value[e].toJSON;
+  });
 }
 
 function encode(value, buffer, offset) {
@@ -346,8 +344,10 @@ function encode(value, buffer, offset) {
     return 1;
   }
 
-  if('function' === typeof value.toJSON)
-    return encode(value.toJSON(), buffer, offset)
+  // Custom toJSON function.
+  if (typeof value.toJSON === 'function') {
+    return encode(value.toJSON(), buffer, offset);
+  }
 
   // Container Types
   if (type === "object") {
@@ -359,7 +359,7 @@ function encode(value, buffer, offset) {
       length = value.length;
     }
     else {
-      var keys = encodeableKeys(value)
+      var keys = encodeableKeys(value);
       length = keys.length;
     }
 
@@ -393,8 +393,7 @@ function encode(value, buffer, offset) {
 
     return size;
   }
-  if(type === "function")
-    return undefined
+  if (type === "function") return undefined;
   throw new Error("Unknown type " + type);
 }
 
@@ -462,13 +461,15 @@ function sizeof(value) {
   // Boolean, null, undefined
   if (type === "boolean" || type === "undefined" || value === null) return 1;
 
-  if('function' === typeof value.toJSON)
-    return sizeof(value.toJSON())
+  if (typeof value.toJSON === 'function') {
+    return sizeof(value.toJSON());
+  }
 
   // Container Types
   if (type === "object") {
-    if('function' === typeof value.toJSON)
-      value = value.toJSON()
+    if ('function' === typeof value.toJSON) {
+      value = value.toJSON();
+    }
 
     size = 0;
     if (Array.isArray(value)) {
@@ -478,7 +479,7 @@ function sizeof(value) {
       }
     }
     else {
-      var keys = encodeableKeys(value)
+      var keys = encodeableKeys(value);
       length = keys.length;
       for (var i = 0; i < length; i++) {
         var key = keys[i];
@@ -496,8 +497,9 @@ function sizeof(value) {
     }
     throw new Error("Array or object too long 0x" + length.toString(16));
   }
-  if(type === "function")
-    return 0
+  if (type === "function") {
+    return 0;
+  }
   throw new Error("Unknown type " + type);
 }
 
