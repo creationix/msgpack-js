@@ -32,7 +32,7 @@ Also I've added a type for `undefined` that works just like the `null` type.
 ## Usage
 
 ``` javascript
-var msgpack = require('msgpack');
+var msgpack = require('msgpack-js');
 var assert = require('assert');
 
 var initial = {Hello: "World"};
