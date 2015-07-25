@@ -1,51 +1,44 @@
-# MSGPACK-JS-V5
+# msgpack for JavaScript
 
-**Please see the [original README.md][1] from the source repository for more
-information.**
+[![node support](https://travis-ci.org/creationix/msgpack-js.png)](https://travis-ci.org/creationix/msgpack-js)
 
-This is a port of [creationix/msgpack-js][0] to support the new MsgPack v5
-specification.
+[![browser support](https://ci.testling.com/creationix/msgpack-js.png)](https://ci.testling.com/creationix/msgpack-js)
 
-* New spec: https://github.com/msgpack/msgpack/blob/master/spec.md
-* Old spec: https://github.com/msgpack/msgpack/blob/master/spec-old.md
 
-Please feel free to open issues/pull requests for support/discussion.
+A handwritten msgpack encoder and decoder for Node.JS and modern browsers.
 
-# INSTALL
+The original format can be found at <http://wiki.msgpack.org/display/MSGPACK/Format+specification>
 
-```sh
-$ npm i msgpack-js-v5 --save
+
+## Extension
+
+I've extended the format a little to allow for encoding and decoding of `undefined` and `Buffer` instances.
+
+This required three new type codes that were previously marked as "reserved".
+This change means that using these new types will render your serialized data
+incompatible with other messagepack implementations that don't have the same
+extension.
+
+There are two new types for storing node `Buffer` instances. These work just 
+like "raw 16" and "raw 32" except they are node buffers instead of strings.
+
+    buffer 16  11011000  0xd8
+    buffer 32  11011001  0xd9
+
+Also I've added a type for `undefined` that works just like the `null` type.
+
+    undefined  11000100  0xc4
+
+## Usage
+
+``` javascript
+var msgpack = require('msgpack-js');
+var assert = require('assert');
+
+var initial = {Hello: "World"};
+var encoded = msgpack.encode(initial);
+var decoded = msgpack.decode(encoded);
+
+assert.deepEqual(initial, decoded);
 ```
-
-# EXTENSION
-
-Since there is no way to encode `undefined` inside the msgpack spec, an extension point is
-used for this purpose. Specifically, the `fixext 1` type is used with all values being 0
-to indicate `undefined`. On the wire, it requires 3 bytes and should looks like this:
-
-```
-0xd4 | 0x00 | 0x00
-```
-
-Where `|` is byte separator.
-
-# EXT / FIXEXT
-
-Extensions are encoded/decoded to and from a simple 2-elements array tuple of the form
-`[type, Buffer]`. Where `type` is the msgpack extension type identifier and `Buffer` is
-the raw decoded value.
-
-Special case for `fixext 1` since it will always be 1-byte long a simple `[type, value]`
-is returned directly instead of wrapping it in node.js `Buffer`.
-
-# VERSIONING
-
-This package will follows `msgpack-js` version for the time being. The version string will
-simply be appended with `v5`.
-
-If and when this package diverges from the original, we can start our own versioning. Or
-this module could just be merged into the original `msgpack-js` module.
-
- [0]: https://github.com/creationix/msgpack-js
- [1]: https://github.com/creationix/msgpack-js/blob/master/README.markdown
 
