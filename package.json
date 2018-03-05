@@ -7,6 +7,9 @@
     "type": "git",
     "url": "git://github.com/chakrit/msgpack-js.git"
   },
+  "engines": {
+    "node" : ">0.7.0"
+  },
   "main": "msgpack.js",
   "dependencies": {
     "bops": "~1.0.0"
