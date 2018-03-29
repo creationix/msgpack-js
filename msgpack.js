@@ -11,6 +11,7 @@ exports.encode = function (value) {
 };
 
 exports.decode = decode;
+exports.Decoder = Decoder;
 
 // https://gist.github.com/frsyuki/5432559 - v5 spec
 //
@@ -27,6 +28,7 @@ exports.decode = decode;
 function Decoder(buffer, offset) {
   this.offset = offset || 0;
   this.buffer = buffer;
+  this.bytesRemaining = buffer.length - this.offset;
 }
 Decoder.prototype.map = function (length) {
   var value = {};
@@ -257,6 +259,11 @@ Decoder.prototype.parse = function () {
   }
 
   throw new Error("Unknown type 0x" + type.toString(16));
+};
+Decoder.prototype.decode = function () {
+  var rv = this.parse();
+  this.bytesRemaining = this.buffer.length - this.offset;
+  return rv;
 };
 function decode(buffer) {
   var decoder = new Decoder(buffer);
@@ -593,5 +600,4 @@ function sizeof(value) {
   }
   throw new Error("Unknown type " + type);
 }
-
 
